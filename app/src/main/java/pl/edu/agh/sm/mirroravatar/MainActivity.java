@@ -3,6 +3,7 @@ package pl.edu.agh.sm.mirroravatar;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.Camera;
 import android.os.Bundle;
@@ -22,10 +23,12 @@ public class MainActivity extends AppCompatActivity {
         camera = getCameraInstance();
 
         // Create our Preview view and set it as the content of our activity.
-        cameraPreview = new CameraPreview(this, camera);
-        FrameLayout preview = (FrameLayout) findViewById(R.id.camera_preview);
-        preview.addView(cameraPreview);
+//        cameraPreview = new CameraPreview(this, camera);
+//        FrameLayout preview = (FrameLayout) findViewById(R.id.camera_preview);
+//        preview.addView(cameraPreview);
 
+        Intent intent = new Intent(MainActivity.this, OpenGLAcitvity.class);
+        startActivity(intent);
     }
 
     /** Check if this device has a camera */
