@@ -20,12 +20,7 @@ import org.opencv.android.JavaCamera2View;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
-import org.opencv.core.MatOfRect;
-import org.opencv.core.Point;
-import org.opencv.core.Rect;
-import org.opencv.core.Scalar;
 import org.opencv.core.Size;
-import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
 
 import java.io.File;
@@ -61,8 +56,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     private TextView rotationTextView;
     private CascadeClassifier faceDetector = null;
     private File faceDir;
-    private Double imageRatio = 0.0;
     private Mat imageMat, grayMat;
+    private int screenRotation = 0;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -136,65 +131,15 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
         imageMat = inputFrame.rgba();
-        grayMat = inputFrame.gray();
-//        grayMat = get480Image(inputFrame.gray());
-        imageRatio = 1.0;
+        // downsize gray for increase efficiency
+        Mat graySrc = inputFrame.gray();
+        Size imageSize = new Size(graySrc.width(), graySrc.height());
+        Double imageRatio = OpenCvUtils.ratioTo480(imageSize);
+        grayMat = OpenCvUtils.get480Image(graySrc, imageSize, imageRatio, screenRotation);
 
         // detect face rectangle
-        drawFaceRectangle();
-
+        OpenCvUtils.drawFaceRectangle(faceDetector, imageMat, grayMat, imageRatio, screenRotation);
         return imageMat;
-    }
-
-    private Mat get480Image(Mat src) {
-        Size imageSize = new Size(src.width(), src.height());
-        imageRatio = ratioTo480(imageSize);
-        if (imageRatio.equals(1.0)) return src;
-        Size dstSize = new Size(imageSize.width * imageRatio, imageSize.height * imageRatio);
-        Mat dst = new Mat();
-        Imgproc.resize(src, dst, dstSize);
-        return dst;
-    }
-
-    private Double ratioTo480(Size src) {
-        double w = src.width;
-        double h = src.height;
-        double heightMax = 480;
-        double ratio;
-        if (w > h) {
-            if (w < heightMax) return 1.0;
-            ratio = heightMax / w;
-        } else {
-            if (h < heightMax) return 1.0;
-            ratio = heightMax / h;
-        }
-        return ratio;
-    }
-
-    private void drawFaceRectangle() {
-        MatOfRect faceDetections = new MatOfRect();
-        faceDetector.detectMultiScale(grayMat, faceDetections);
-
-        Log.d("FaceDetector", String.valueOf(faceDetections.toArray().length));
-        for (Rect rect : faceDetections.toArray()) {
-            double x, y, w, h;
-            if (imageRatio.equals(1.0)) {
-                x = rect.x;
-                y = rect.y;
-                w = x + rect.width;
-                h = y + rect.height;
-            } else {
-                x = rect.x / imageRatio;
-                y = rect.y / imageRatio;
-                w = x + (rect.width / imageRatio);
-                h = y + (rect.height / imageRatio);
-            }
-
-            Imgproc.rectangle(imageMat,
-                    new Point(x, y),
-                    new Point(w, h),
-                    new Scalar(255, 0, 0));
-        }
     }
 
     private void checkOpenCV() {
@@ -261,12 +206,16 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             public void onOrientationChanged(int orientation) {
                 if (Range.create(45, 134).contains(orientation)) {
                     rotationTextView.setText(getString(R.string.n_270_degree));
+                    screenRotation = 270;
                 } else if (Range.create(135, 224).contains(orientation)) {
                     rotationTextView.setText(getString(R.string.n_180_degree));
+                    screenRotation = 180;
                 } else if (Range.create(225, 314).contains(orientation)) {
                     rotationTextView.setText(getString(R.string.n_90_degree));
+                    screenRotation = 90;
                 } else {
                     rotationTextView.setText(getString(R.string.n_0_degree));
+                    screenRotation = 0;
                 }
             }
         };
