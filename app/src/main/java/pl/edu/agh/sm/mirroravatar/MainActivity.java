@@ -9,17 +9,14 @@ import android.util.Range;
 import android.view.OrientationEventListener;
 import android.view.SurfaceView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.JavaCamera2View;
-import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
@@ -81,7 +78,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
         }
 
-        javaCameraView = findViewById(R.id.cameraView);
+        javaCameraView = (JavaCamera2View) findViewById(R.id.cameraView);
         javaCameraView.setVisibility(SurfaceView.VISIBLE);
         javaCameraView.setCameraIndex(CameraCharacteristics.LENS_FACING_FRONT);
         javaCameraView.setCvCameraViewListener(this);
@@ -93,7 +90,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         } else {
             orientationEventListener.disable();
         }
-
+        callFaceDetector();
     }
 
     @Override
@@ -107,7 +104,10 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     @Override
     public void onResume() {
         super.onResume();
-        OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION, this, baseCallback);
+        checkOpenCV();
+        if (javaCameraView != null) {
+            javaCameraView.enableView();
+        }
     }
 
     @Override
@@ -150,7 +150,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Size imageSize = new Size(src.width(), src.height());
         imageRatio = ratioTo480(imageSize);
         if (imageRatio.equals(1.0)) return src;
-        Size dstSize = new Size(imageSize.width*imageRatio, imageSize.height*imageRatio);
+        Size dstSize = new Size(imageSize.width * imageRatio, imageSize.height * imageRatio);
         Mat dst = new Mat();
         Imgproc.resize(src, dst, dstSize);
         return dst;
@@ -175,7 +175,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         MatOfRect faceDetections = new MatOfRect();
         faceDetector.detectMultiScale(grayMat, faceDetections);
 
-        Log.d("Found faces", String.valueOf(faceDetections.toArray().length));
+        Log.d("FaceDetector", String.valueOf(faceDetections.toArray().length));
         for (Rect rect : faceDetections.toArray()) {
             double x, y, w, h;
             if (imageRatio.equals(1.0)) {
@@ -211,10 +211,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         );
     }
 
-    private void shortMsg(Context context, String s) {
-        Toast.makeText(context, s, Toast.LENGTH_SHORT).show();
-    }
-
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         //Checking the request code of our request
@@ -222,29 +218,21 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             if (allPermissionsGranted()) {
                 checkOpenCV();
             } else {
-                shortMsg(this, "Permissions not granted by the user.");
+                Log.d("Permissions", "Permissions not granted by the user.");
                 finish();
             }
         }
     }
 
-    private final BaseLoaderCallback baseCallback = new BaseLoaderCallback(this) {
-        @Override
-        public void onManagerConnected(int status) {
-            if (status == LoaderCallbackInterface.SUCCESS) {
-                shortMsg(getApplicationContext(), "gut");
-                loadFaceLib();
-                if (faceDetector != null && faceDetector.empty()) {
-                    faceDetector = null;
-                } else {
-                    faceDir.delete();
-                }
-                javaCameraView.enableView();
-            } else {
-                super.onManagerConnected(status);
-            }
+    private void callFaceDetector() {
+        loadFaceLib();
+        if (faceDetector != null && faceDetector.empty()) {
+            faceDetector = null;
+        } else {
+            faceDir.delete();
         }
-    };
+        javaCameraView.enableView();
+    }
 
     private void loadFaceLib() {
         try {
