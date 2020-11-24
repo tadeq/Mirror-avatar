@@ -13,7 +13,7 @@
         android:allowBackup="true"
         android:hardwareAccelerated="true"
         android:theme="@style/Theme.AppCompat"
-        android:label="FaceTracker">
+        android:label="MirrorAvatar">
 
         <meta-data android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version"/>

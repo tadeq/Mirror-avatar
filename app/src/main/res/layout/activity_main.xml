@@ -11,13 +11,6 @@
     <pl.edu.agh.sm.mirroravatar.camera.CameraSourcePreview
         android:id="@+id/preview"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
-
-        <pl.edu.agh.sm.mirroravatar.camera.GraphicOverlay
-            android:id="@+id/faceOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-    </pl.edu.agh.sm.mirroravatar.camera.CameraSourcePreview>
+        android:layout_height="match_parent" />
 
 </LinearLayout>
