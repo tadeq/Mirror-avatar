@@ -1,0 +1,97 @@
+# Blender MTL File: 'butterfly_free.blend'
+# Material Count: 8
+
+newmtl Butterfly_Wings
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.313636 0.313636 0.313636
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd textures_JPG\\wing_albedo.jpg
+map_Ks textures_JPG\\wing_specular.jpg
+map_Ns textures_JPG\\wing_roughness.jpg
+map_d textures_JPG\\wing_alpha.jpg
+
+newmtl abdomen
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.018849 0.018849 0.018849
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 2
+map_Kd textures_JPG\\body_albedo.jpg
+map_Ks textures_JPG\\body_specular.jpg
+map_Ns textures_JPG\\body_roughness.jpg
+
+newmtl antenna
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.018849 0.018849 0.018849
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 2
+map_Kd textures_JPG\\body_albedo.jpg
+map_Ks textures_JPG\\body_specular.jpg
+map_Ns textures_JPG\\body_roughness.jpg
+
+newmtl eyes
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.018849 0.018849 0.018849
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 2
+map_Kd textures\\body_albedo.png
+map_Ks textures\\body_specular.png
+map_Ns textures\\body_roughness.png
+
+newmtl head
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.018849 0.018849 0.018849
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 2
+map_Kd textures_JPG\\body_albedo.jpg
+map_Ks textures_JPG\\body_specular.jpg
+map_Ns textures_JPG\\body_roughness.jpg
+
+newmtl joint
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.018849 0.018849 0.018849
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 2
+map_Kd textures_JPG\\body_albedo.jpg
+map_Ks textures_JPG\\body_specular.jpg
+map_Ns textures_JPG\\body_roughness.jpg
+
+newmtl legs
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.004896 0.004896 0.004896
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 2
+
+newmtl thorax
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.018849 0.018849 0.018849
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 2
+map_Kd textures_JPG\\body_albedo.jpg
+map_Ks textures_JPG\\body_specular.jpg
+map_Ns textures_JPG\\body_roughness.jpg
