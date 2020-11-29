@@ -7,6 +7,9 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.hardware.Camera;
 import android.os.Bundle;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
+import android.view.View;
 import android.view.ViewGroup;
 
 import org.rajawali3d.surface.IRajawaliSurface;
@@ -14,7 +17,8 @@ import org.rajawali3d.surface.RajawaliSurfaceView;
 
 
 public class MainActivity extends AppCompatActivity {
-    private Renderer modelRenderer;
+    private ObjRenderer modelRenderer;
+
     private Camera camera;
     private CameraPreview cameraPreview;
 
@@ -38,11 +42,18 @@ public class MainActivity extends AppCompatActivity {
         // Add mSurface to your root view
         addContentView(surface, new ActionBar.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT));
 
-        modelRenderer = new Renderer(this);
+        modelRenderer = new ObjRenderer(this);
         surface.setSurfaceRenderer(modelRenderer);
-
+        surface.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View view, MotionEvent motionEvent) {
+                modelRenderer.onTouchEvent(motionEvent);
+                return true;
+            }
+        });
 
     }
+
 
     /** Check if this device has a camera */
     private boolean checkCameraHardware(Context context) {
