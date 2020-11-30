@@ -1,32 +1,16 @@
 package pl.edu.agh.sm.mirroravatar;
 
-import javax.microedition.khronos.egl.EGLConfig;
-import javax.microedition.khronos.opengles.GL10;
-
-
 import android.content.Context;
-import android.util.Log;
-import android.view.GestureDetector;
 import android.view.MotionEvent;
-import android.view.SurfaceView;
 
 import org.rajawali3d.Object3D;
-import org.rajawali3d.animation.Animation3D;
-import org.rajawali3d.animation.RotateAroundAnimation3D;
 import org.rajawali3d.lights.DirectionalLight;
-import org.rajawali3d.lights.PointLight;
 import org.rajawali3d.loader.LoaderOBJ;
 import org.rajawali3d.loader.ParsingException;
-import org.rajawali3d.materials.Material;
-import org.rajawali3d.materials.methods.DiffuseMethod;
-import org.rajawali3d.materials.textures.ATexture;
-import org.rajawali3d.materials.textures.Texture;
 import org.rajawali3d.math.Quaternion;
 import org.rajawali3d.math.vector.Vector2;
 import org.rajawali3d.math.vector.Vector3;
 import org.rajawali3d.renderer.RajawaliRenderer;
-
-import static android.content.ContentValues.TAG;
 
 public class ObjRenderer extends RajawaliRenderer {
     private Object3D parsedObject;
@@ -70,8 +54,8 @@ public class ObjRenderer extends RajawaliRenderer {
     protected void onRender(long elapsedRealtime, double deltaTime) {
         //        parsedObject.rotate(Vector3.Axis.Y, 1.0);
         super.onRender(elapsedRealtime, deltaTime);
-        Quaternion orientation = new Quaternion(Vector3.X, -90*pitch);
-        orientation.multiply(new Quaternion(Vector3.Y, -90*yaw));
+        Quaternion orientation = new Quaternion(Vector3.X, -90 * pitch);
+        orientation.multiply(new Quaternion(Vector3.Y, -90 * yaw));
 
         parsedObject.setOrientation(orientation);
     }
