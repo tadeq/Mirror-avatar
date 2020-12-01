@@ -25,15 +25,13 @@ import com.google.android.gms.vision.MultiProcessor;
 import com.google.android.gms.vision.Tracker;
 import com.google.android.gms.vision.face.Face;
 import com.google.android.gms.vision.face.FaceDetector;
-import com.google.android.gms.vision.face.Landmark;
 import com.google.android.material.snackbar.Snackbar;
-import com.google.common.collect.ImmutableMap;
 
 import org.rajawali3d.surface.IRajawaliSurface;
 import org.rajawali3d.surface.RajawaliSurfaceView;
 
 import java.io.IOException;
-import java.util.Map;
+import java.util.Arrays;
 
 import pl.edu.agh.sm.mirroravatar.camera.CameraSourcePreview;
 
@@ -126,8 +124,8 @@ public class MainActivity extends AppCompatActivity {
     private void createCameraSource() {
         Context context = getApplicationContext();
         FaceDetector detector = new FaceDetector.Builder(context)
-                .setClassificationType(FaceDetector.ALL_CLASSIFICATIONS)
-                .setLandmarkType(FaceDetector.ALL_LANDMARKS)
+                .setLandmarkType(FaceDetector.CONTOUR_LANDMARKS)
+                .setMode(FaceDetector.SELFIE_MODE)
                 .build();
         detector.setProcessor(
                 new MultiProcessor.Builder<>(new FaceTrackerFactory())
@@ -147,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
 
         mCameraSource = new CameraSource.Builder(context, detector)
                 .setRequestedPreviewSize(640, 480)
-                .setFacing(CameraSource.CAMERA_FACING_BACK)
+                .setFacing(CameraSource.CAMERA_FACING_FRONT)
                 .setRequestedFps(30.0f)
                 .build();
     }
@@ -244,7 +242,6 @@ public class MainActivity extends AppCompatActivity {
                     GoogleApiAvailability.getInstance().getErrorDialog(this, code, RC_HANDLE_GMS);
             dlg.show();
         }
-
         if (mCameraSource != null) {
             try {
                 mPreview.start(mCameraSource);
@@ -258,33 +255,13 @@ public class MainActivity extends AppCompatActivity {
 
     private class FaceTrackerFactory implements MultiProcessor.Factory<Face> {
 
-        Map<Integer, String> LANDMARK_LABELS = ImmutableMap.<Integer, String>builder()
-                .put(Landmark.LEFT_EYE, "Left eye")
-                .put(Landmark.RIGHT_EYE, "Right eye")
-                .put(Landmark.BOTTOM_MOUTH, "Bottom mouth")
-                .put(Landmark.LEFT_MOUTH, "Left mouth")
-                .put(Landmark.RIGHT_MOUTH, "Right mouth")
-                .build();
-
         @Override
         public Tracker<Face> create(Face face) {
             return new Tracker<Face>() {
                 @Override
                 public void onUpdate(Detector.Detections<Face> detections, Face face) {
-                    System.out.println(mapToString(face));
-                    face.getLandmarks().stream()
-                            .filter(landmark -> LANDMARK_LABELS.containsKey(landmark.getType()))
-                            .map(this::mapToString)
-                            .forEach(System.out::println);
-                }
-
-                private String mapToString(Face face) {
-                    return "FACE position: (" + face.getPosition().x + "," + face.getPosition().y
-                            + "), width: " + face.getWidth() + ", height: " + face.getHeight() + "]";
-                }
-
-                private String mapToString(Landmark landmark) {
-                    return LANDMARK_LABELS.get(landmark.getType()) + ": [" + landmark.getPosition().x + ", " + landmark.getPosition().y + "]";
+                    // Contour labels available at https://developers.google.com/android/reference/com/google/android/gms/vision/face/Contour
+                    face.getContours().forEach(contour -> System.out.println("CONTOUR " + contour.getType() + ", POINTS: " + Arrays.toString(contour.getPositions())));
                 }
             };
         }
