@@ -27,32 +27,19 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
     private static final Scalar PINK = new Scalar(255.0, 0.0, 255.0);
     private static final Scalar CYAN = new Scalar(0.0, 255.0, 255.0);
     private static final Scalar WHITE = new Scalar(255.0, 255.0, 255.0);
-    private static final int TRAIN_FRAMES = 5;
-    private static final int TM_SQDIFF = 0;
-    private static final int TM_SQDIFF_NORMED = 1;
-    private static final int TM_CCOEFF = 2;
-    private static final int TM_CCOEFF_NORMED = 3;
-    private static final int TM_CCORR = 4;
-    private static final int TM_CCORR_NORMED = 5;
 
     private final CascadeClassifier faceDetector;
     private final CascadeClassifier leftEyeDetector;
+    private final CascadeClassifier rightEyeDetector;
 
     private Mat imageMat, grayMat;
     private Double imageRatio;
-    private int method = 0;
     private int screenRotation = 0;
-    private int learn_frames = 0;
-    private Mat templateR;
-    private Mat templateL;
 
-    public OpenCvEyeTrackingProcessor(CascadeClassifier faceDetector, CascadeClassifier leftEyeDetector) {
+    public OpenCvEyeTrackingProcessor(CascadeClassifier faceDetector, CascadeClassifier leftEyeDetector, CascadeClassifier rightEyeDetector) {
         this.faceDetector = faceDetector;
         this.leftEyeDetector = leftEyeDetector;
-    }
-
-    public void setMethod(int method) {
-        this.method = method;
+        this.rightEyeDetector = rightEyeDetector;
     }
 
     public void setScreenRotation(int screenRotation) {
@@ -93,12 +80,12 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
         Log.d("FaceDetector", String.valueOf(faceDetections.toArray().length));
 
         for (Rect faceRect : faceDetections.toArray()) {
-//            drawRect(faceRect, WHITE);
-            drawEyeRects(faceRect);
+            // drawRect(faceRect, WHITE);
+            drawEyeRectangles(faceRect);
         }
     }
 
-    private void drawEyeRects(Rect rect) {
+    private void drawEyeRectangles(Rect rect) {
         // compute eyes area
         Rect eyearea_right = new Rect(rect.x + rect.width / 7,
                 (int) (rect.y + (rect.height / 4.0)),
@@ -107,87 +94,20 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
                 + (rect.width - 2 * rect.width / 7) / 2,
                 (int) (rect.y + (rect.height / 4.0)),
                 (rect.width - 2 * rect.width / 7) / 2, (int) (rect.height / 4.0));
-//        drawRect(eyearea_left, RED);
-//        drawRect(eyearea_right, RED);
-        templateR = get_template(eyearea_right);
-        templateL = get_template(eyearea_left);
-//        if (learn_frames < TRAIN_FRAMES) {
-//            templateR = get_template(eyearea_right);
-//            templateL = get_template(eyearea_left);
-//            if (templateL != null && templateR != null) {
-//                learn_frames++;
-//            }
-//        } else {
-//            // Learning finished, use the new templates for template
-//            // matching
-//            match_eye(eyearea_right, templateR, method);
-//            match_eye(eyearea_left, templateL, method);
-//        }
+        // drawRect(eyearea_left, RED);
+        // drawRect(eyearea_right, RED);
+        drawIris(eyearea_right, rightEyeDetector);
+        drawIris(eyearea_left, leftEyeDetector);
     }
 
-    private void match_eye(Rect area, Mat mTemplate, int type) {
-        Point matchLoc;
-        Mat mROI = grayMat.submat(area);
-        int result_cols = mROI.cols() - mTemplate.cols() + 1;
-        int result_rows = mROI.rows() - mTemplate.rows() + 1;
-        // Check for bad template size
-        if (mTemplate.cols() <= 0 || mTemplate.rows() <= 0) {
-            return;
-        }
-        if (result_cols <= 0 || result_rows <= 0)
-            return;
-        Mat mResult = new Mat(result_cols, result_rows, CvType.CV_8U);
-
-        switch (type) {
-            case TM_SQDIFF:
-                Imgproc.matchTemplate(mROI, mTemplate, mResult, Imgproc.TM_SQDIFF);
-                break;
-            case TM_SQDIFF_NORMED:
-                Imgproc.matchTemplate(mROI, mTemplate, mResult,
-                        Imgproc.TM_SQDIFF_NORMED);
-                break;
-            case TM_CCOEFF:
-                Imgproc.matchTemplate(mROI, mTemplate, mResult, Imgproc.TM_CCOEFF);
-                break;
-            case TM_CCOEFF_NORMED:
-                Imgproc.matchTemplate(mROI, mTemplate, mResult,
-                        Imgproc.TM_CCOEFF_NORMED);
-                break;
-            case TM_CCORR:
-                Imgproc.matchTemplate(mROI, mTemplate, mResult, Imgproc.TM_CCORR);
-                break;
-            case TM_CCORR_NORMED:
-                Imgproc.matchTemplate(mROI, mTemplate, mResult,
-                        Imgproc.TM_CCORR_NORMED);
-                break;
-        }
-
-        Core.MinMaxLocResult mmres = Core.minMaxLoc(mResult);
-        // there is difference in matching methods - best match is max/min value
-        if (type == TM_SQDIFF || type == TM_SQDIFF_NORMED) {
-            matchLoc = mmres.minLoc;
-        } else {
-            matchLoc = mmres.maxLoc;
-        }
-
-        Point matchLoc_tx = new Point(matchLoc.x + area.x, matchLoc.y + area.y);
-        Point matchLoc_ty = new Point(matchLoc.x + mTemplate.cols() + area.x,
-                matchLoc.y + mTemplate.rows() + area.y);
-        Rect matchLoc_t = new Rect(matchLoc_tx, matchLoc_ty);
-        drawRect(matchLoc_t, RED);
-        drawDot(imageMat, new Point(matchLoc.x + mTemplate.cols() / 2.0 + area.x, matchLoc.y + mTemplate.rows() / 2.0 + area.y));
-    }
-
-    private Mat get_template(Rect area) {
-        Mat template;
+    private void drawIris(Rect area, CascadeClassifier classifier) {
         Mat mROI = grayMat.submat(area);
         MatOfRect eyes = new MatOfRect();
         Point iris = new Point();
-        leftEyeDetector.detectMultiScale(mROI, eyes, 1.15, 2,
+        classifier.detectMultiScale(mROI, eyes, 1.15, 2,
                 Objdetect.CASCADE_FIND_BIGGEST_OBJECT
                         | Objdetect.CASCADE_SCALE_IMAGE, new Size(30, 30),
                 new Size());
-
 
         Log.d("EyesDetector", String.valueOf(eyes.toArray().length));
         Rect[] eyesArray = eyes.toArray();
@@ -198,7 +118,7 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
             Rect eye_only_rectangle = new Rect((int) eye.tl().x,
                     (int) (eye.tl().y + eye.height * 0.4), (int) eye.width,
                     (int) (eye.height * 0.6));
-//            drawRect(eye_only_rectangle);
+            // drawRect(eye_only_rectangle, RED);
             mROI = grayMat.submat(eye_only_rectangle);
             Rect rotated_eye_only_rectangle = rotateRect(eye_only_rectangle);
             Mat vyrez = imageMat.submat(rotated_eye_only_rectangle);
@@ -212,11 +132,7 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
             Rect eye_template = new Rect((int) iris.x - 24 / 2, (int) iris.y
                     - 24 / 2, 24, 24);
             drawRect(eye_template, RED);
-
-            template = (grayMat.submat(eye_template)).clone();
-            return template;
         }
-        return null;
     }
 
     private void drawRect(Rect rect, Scalar color) {

@@ -7,7 +7,6 @@ import android.util.Log;
 import android.util.Range;
 import android.view.OrientationEventListener;
 import android.view.SurfaceView;
-import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -41,6 +40,8 @@ public class MainActivity extends AppCompatActivity {
     private static final String FACE_MODEL = "haarcascade_frontalface_alt2.xml";
     private static final String LEFT_EYE_DIR = "lefteyelib";
     private static final String LEFT_EYE_MODEL = "haarcascade_lefteye_2splits.xml";
+    private static final String RIGHT_EYE_DIR = "righteyelib";
+    private static final String RIGHT_EYE_MODEL = "haarcascade_righteye_2splits.xml";
     private static final int BYTE_SIZE = 4096;
     private static final int REQUEST_CODE_PERMISSIONS = 111;
     private static final String[] REQUIRED_PERMISSIONS = {
@@ -56,8 +57,10 @@ public class MainActivity extends AppCompatActivity {
     private OpenCvEyeTrackingProcessor eyeTrackingProcessor;
     private CascadeClassifier faceDetector = null;
     private CascadeClassifier leftEyeDetector = null;
+    private CascadeClassifier rightEyeDetector = null;
     private File faceDir;
     private File leftEyeDir;
+    private File rightEyeDir;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -77,8 +80,6 @@ public class MainActivity extends AppCompatActivity {
         javaCameraView.setVisibility(SurfaceView.VISIBLE);
         javaCameraView.setCameraIndex(CAMERA_SOURCE.getCameraIndex());
         rotationTextView = findViewById(R.id.rotation_tv);
-//        SeekBar methodSeekBar = findViewById(R.id.seekBar);
-//        methodSeekBar.setOnSeekBarChangeListener(new SeekBarChangeListener());
 
         OrientationEventListener orientationEventListener = initLocationListener();
         if (orientationEventListener.canDetectOrientation()) {
@@ -118,6 +119,9 @@ public class MainActivity extends AppCompatActivity {
         if (leftEyeDir.exists()) {
             leftEyeDir.delete();
         }
+        if (rightEyeDir.exists()) {
+            rightEyeDir.delete();
+        }
     }
 
 
@@ -151,44 +155,55 @@ public class MainActivity extends AppCompatActivity {
     private void callFaceDetector() {
         loadFaceLib();
         loadLeftEyeDetector();
-        eyeTrackingProcessor = new OpenCvEyeTrackingProcessor(faceDetector, leftEyeDetector);
+        loadRightEyeDetector();
+        eyeTrackingProcessor = new OpenCvEyeTrackingProcessor(faceDetector, leftEyeDetector, rightEyeDetector);
         javaCameraView.setCvCameraViewListener(eyeTrackingProcessor);
         javaCameraView.enableView();
     }
 
     private void loadFaceLib() {
-        try {
-            InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_frontalface_alt2);
-            faceDir = getDir(FACE_DIR, Context.MODE_PRIVATE);
-            File faceModel = new File(faceDir, FACE_MODEL);
-            if (!faceModel.exists()) {
-                FileOutputStream modelOutputStream = new FileOutputStream(faceModel);
-                byte[] buffer = new byte[BYTE_SIZE];
-                int bytesRead;
-                while ((bytesRead = modelInputStream.read(buffer)) != -1) {
-                    modelOutputStream.write(buffer, 0, bytesRead);
-                }
-                modelInputStream.close();
-                modelOutputStream.close();
-            }
-            faceDetector = new CascadeClassifier(faceModel.getAbsolutePath());
-            if (faceDetector.empty()) {
-                faceDetector = null;
-            } else {
-                faceDir.delete();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+        InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_frontalface_alt2);
+        faceDir = getDir(FACE_DIR, Context.MODE_PRIVATE);
+        File faceModel = new File(faceDir, FACE_MODEL);
+        loadModel(modelInputStream, faceModel);
+        faceDetector = new CascadeClassifier(faceModel.getAbsolutePath());
+        if (faceDetector.empty()) {
+            faceDetector = null;
+        } else {
+            faceDir.delete();
         }
     }
 
     private void loadLeftEyeDetector() {
+        InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_lefteye_2splits);
+        leftEyeDir = getDir(LEFT_EYE_DIR, Context.MODE_PRIVATE);
+        File leftEyeModel = new File(leftEyeDir, LEFT_EYE_MODEL);
+        loadModel(modelInputStream, leftEyeModel);
+        leftEyeDetector = new CascadeClassifier(leftEyeModel.getAbsolutePath());
+        if (leftEyeDetector.empty()) {
+            leftEyeDetector = null;
+        } else {
+            leftEyeDir.delete();
+        }
+    }
+
+    private void loadRightEyeDetector() {
+        InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_righteye_2splits);
+        rightEyeDir = getDir(RIGHT_EYE_DIR, Context.MODE_PRIVATE);
+        File rightEyeModel = new File(rightEyeDir, RIGHT_EYE_MODEL);
+        loadModel(modelInputStream, rightEyeModel);
+        rightEyeDetector = new CascadeClassifier(rightEyeModel.getAbsolutePath());
+        if (rightEyeDetector.empty()) {
+            rightEyeDetector = null;
+        } else {
+            rightEyeDir.delete();
+        }
+    }
+
+    private void loadModel(InputStream modelInputStream, File model) {
         try {
-            InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_lefteye_2splits);
-            leftEyeDir = getDir(LEFT_EYE_DIR, Context.MODE_PRIVATE);
-            File leftEyeModel = new File(leftEyeDir, LEFT_EYE_MODEL);
-            if (!leftEyeModel.exists()) {
-                FileOutputStream modelOutputStream = new FileOutputStream(leftEyeModel);
+            if (!model.exists()) {
+                FileOutputStream modelOutputStream = new FileOutputStream(model);
                 byte[] buffer = new byte[BYTE_SIZE];
                 int bytesRead;
                 while ((bytesRead = modelInputStream.read(buffer)) != -1) {
@@ -196,12 +211,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 modelInputStream.close();
                 modelOutputStream.close();
-            }
-            leftEyeDetector = new CascadeClassifier(leftEyeModel.getAbsolutePath());
-            if (leftEyeDetector.empty()) {
-                leftEyeDetector = null;
-            } else {
-                leftEyeDir.delete();
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -240,24 +249,6 @@ public class MainActivity extends AppCompatActivity {
 
         private int getCameraIndex() {
             return cameraIndex;
-        }
-    }
-
-    private class SeekBarChangeListener implements SeekBar.OnSeekBarChangeListener {
-
-        @Override
-        public void onProgressChanged(SeekBar seekBar, int progress, boolean b) {
-            eyeTrackingProcessor.setMethod(progress);
-        }
-
-        @Override
-        public void onStartTrackingTouch(SeekBar seekBar) {
-
-        }
-
-        @Override
-        public void onStopTrackingTouch(SeekBar seekBar) {
-
         }
     }
 }
