@@ -22,6 +22,11 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
 
     private static final Scalar RED = new Scalar(255.0, 0.0, 0.0);
     private static final Scalar GREEN = new Scalar(0.0, 255.0, 0.0);
+    private static final Scalar BLUE = new Scalar(0.0, 0.0, 255.0);
+    private static final Scalar YELLOW = new Scalar(255.0, 255.0, 0.0);
+    private static final Scalar PINK = new Scalar(255.0, 0.0, 255.0);
+    private static final Scalar CYAN = new Scalar(0.0, 255.0, 255.0);
+    private static final Scalar WHITE = new Scalar(255.0, 255.0, 255.0);
     private static final int TRAIN_FRAMES = 5;
     private static final int TM_SQDIFF = 0;
     private static final int TM_SQDIFF_NORMED = 1;
@@ -29,13 +34,13 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
     private static final int TM_CCOEFF_NORMED = 3;
     private static final int TM_CCORR = 4;
     private static final int TM_CCORR_NORMED = 5;
-    private static final int METHOD = 2;
 
     private final CascadeClassifier faceDetector;
     private final CascadeClassifier leftEyeDetector;
 
     private Mat imageMat, grayMat;
     private Double imageRatio;
+    private int method = 0;
     private int screenRotation = 0;
     private int learn_frames = 0;
     private Mat templateR;
@@ -44,6 +49,10 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
     public OpenCvEyeTrackingProcessor(CascadeClassifier faceDetector, CascadeClassifier leftEyeDetector) {
         this.faceDetector = faceDetector;
         this.leftEyeDetector = leftEyeDetector;
+    }
+
+    public void setMethod(int method) {
+        this.method = method;
     }
 
     public void setScreenRotation(int screenRotation) {
@@ -68,8 +77,8 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
         // downsize gray for increase efficiency
         Mat graySrc = inputFrame.gray();
         Size imageSize = new Size(graySrc.width(), graySrc.height());
-//        imageRatio = ratioTo480(imageSize);
-        imageRatio = 1.0;
+        imageRatio = ratioTo480(imageSize);
+        // imageRatio = 1.0;
         grayMat = getScaledImage(graySrc, imageSize);
 
         // detect face rectangle
@@ -83,44 +92,37 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
         faceDetector.detectMultiScale(grayMat, faceDetections);
         Log.d("FaceDetector", String.valueOf(faceDetections.toArray().length));
 
-        if (faceDetections.toArray().length > 0) {
-            Rect biggestFaceRect = faceDetections.toArray()[0];
-            for (Rect faceRect : faceDetections.toArray()) {
-                if (faceRect.area() > biggestFaceRect.area()) {
-                    biggestFaceRect = faceRect;
-                }
-            }
-            drawRect(biggestFaceRect);
-            drawEyeRects(biggestFaceRect);
+        for (Rect faceRect : faceDetections.toArray()) {
+//            drawRect(faceRect, WHITE);
+            drawEyeRects(faceRect);
         }
     }
 
     private void drawEyeRects(Rect rect) {
         // compute eyes area
-        Rect eyearea_right = new Rect(rect.x + rect.width / 16,
-                (int) (rect.y + (rect.height / 4.5)),
-                (rect.width - 2 * rect.width / 16) / 2, (int) (rect.height / 3.0));
-        Rect eyearea_left = new Rect(rect.x + rect.width / 16
-                + (rect.width - 2 * rect.width / 16) / 2,
-                (int) (rect.y + (rect.height / 4.5)),
-                (rect.width - 2 * rect.width / 16) / 2, (int) (rect.height / 3.0));
-        drawRect(eyearea_left);
-        drawRect(eyearea_right);
-//        templateR = get_template(eyearea_right);
-//        templateL = get_template(eyearea_left);
-//        learn_frames++;
-        if (learn_frames < TRAIN_FRAMES) {
-            templateR = get_template(eyearea_right);
-            templateL = get_template(eyearea_left);
-            if (templateL != null && templateR != null) {
-                learn_frames++;
-            }
-        } else {
-            // Learning finished, use the new templates for template
-            // matching
-            match_eye(eyearea_right, templateR, METHOD);
-            match_eye(eyearea_left, templateL, METHOD);
-        }
+        Rect eyearea_right = new Rect(rect.x + rect.width / 7,
+                (int) (rect.y + (rect.height / 4.0)),
+                (rect.width - 2 * rect.width / 7) / 2, (int) (rect.height / 4.0));
+        Rect eyearea_left = new Rect(rect.x + rect.width / 7
+                + (rect.width - 2 * rect.width / 7) / 2,
+                (int) (rect.y + (rect.height / 4.0)),
+                (rect.width - 2 * rect.width / 7) / 2, (int) (rect.height / 4.0));
+//        drawRect(eyearea_left, RED);
+//        drawRect(eyearea_right, RED);
+        templateR = get_template(eyearea_right);
+        templateL = get_template(eyearea_left);
+//        if (learn_frames < TRAIN_FRAMES) {
+//            templateR = get_template(eyearea_right);
+//            templateL = get_template(eyearea_left);
+//            if (templateL != null && templateR != null) {
+//                learn_frames++;
+//            }
+//        } else {
+//            // Learning finished, use the new templates for template
+//            // matching
+//            match_eye(eyearea_right, templateR, method);
+//            match_eye(eyearea_left, templateL, method);
+//        }
     }
 
     private void match_eye(Rect area, Mat mTemplate, int type) {
@@ -172,12 +174,12 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
         Point matchLoc_ty = new Point(matchLoc.x + mTemplate.cols() + area.x,
                 matchLoc.y + mTemplate.rows() + area.y);
         Rect matchLoc_t = new Rect(matchLoc_tx, matchLoc_ty);
-        drawRect(matchLoc_t);
+        drawRect(matchLoc_t, RED);
         drawDot(imageMat, new Point(matchLoc.x + mTemplate.cols() / 2.0 + area.x, matchLoc.y + mTemplate.rows() / 2.0 + area.y));
     }
 
     private Mat get_template(Rect area) {
-        Mat template = new Mat();
+        Mat template;
         Mat mROI = grayMat.submat(area);
         MatOfRect eyes = new MatOfRect();
         Point iris = new Point();
@@ -189,8 +191,8 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
 
         Log.d("EyesDetector", String.valueOf(eyes.toArray().length));
         Rect[] eyesArray = eyes.toArray();
-        for (int i = 0; i < eyesArray.length;) {
-            Rect eye = eyesArray[i];
+        if (eyesArray.length > 0) {
+            Rect eye = eyesArray[0];
             eye.x = area.x + eye.x;
             eye.y = area.y + eye.y;
             Rect eye_only_rectangle = new Rect((int) eye.tl().x,
@@ -209,7 +211,7 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
 
             Rect eye_template = new Rect((int) iris.x - 24 / 2, (int) iris.y
                     - 24 / 2, 24, 24);
-            drawRect(eye_template);
+            drawRect(eye_template, RED);
 
             template = (grayMat.submat(eye_template)).clone();
             return template;
@@ -217,9 +219,9 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
         return null;
     }
 
-    private void drawRect(Rect rect) {
+    private void drawRect(Rect rect, Scalar color) {
         Rect rotatedRect = rotateRect(rect);
-        drawRect(rotatedRect.tl().x, rotatedRect.tl().y, rotatedRect.br().x, rotatedRect.br().y);
+        drawRect(rotatedRect.tl().x, rotatedRect.tl().y, rotatedRect.br().x, rotatedRect.br().y, color);
     }
 
     private Rect rotateRect(Rect rect) {
@@ -253,8 +255,8 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
         }
     }
 
-    private void drawRect(Double a, Double b, Double w, Double h) {
-        Imgproc.rectangle(imageMat, new Point(a, b), new Point(w, h), RED, 2);
+    private void drawRect(Double a, Double b, Double w, Double h, Scalar color) {
+        Imgproc.rectangle(imageMat, new Point(a, b), new Point(w, h), color, 2);
     }
 
     private void drawDot(Mat mat, Point point) {
@@ -285,7 +287,7 @@ public class OpenCvEyeTrackingProcessor implements CameraBridgeViewBase.CvCamera
     }
 
     private void drawDot(Mat mat, Double a, Double b) {
-        Imgproc.circle(mat, new Point(a, b), 4, GREEN, -1, 8);
+        Imgproc.circle(mat, new Point(a, b), 4, BLUE, -1, 8);
     }
 
     public Mat getScaledImage(Mat src, Size imageSize) {

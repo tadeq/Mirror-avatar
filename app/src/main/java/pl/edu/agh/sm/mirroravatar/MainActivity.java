@@ -2,12 +2,12 @@ package pl.edu.agh.sm.mirroravatar;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.hardware.camera2.CameraCharacteristics;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Range;
 import android.view.OrientationEventListener;
 import android.view.SurfaceView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -36,6 +36,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final CameraSource CAMERA_SOURCE = CameraSource.FRONT;
     private static final String FACE_DIR = "facelib";
     private static final String FACE_MODEL = "haarcascade_frontalface_alt2.xml";
     private static final String LEFT_EYE_DIR = "lefteyelib";
@@ -74,8 +75,10 @@ public class MainActivity extends AppCompatActivity {
 
         javaCameraView = (JavaCamera2View) findViewById(R.id.cameraView);
         javaCameraView.setVisibility(SurfaceView.VISIBLE);
-        javaCameraView.setCameraIndex(CameraCharacteristics.LENS_FACING_FRONT);
+        javaCameraView.setCameraIndex(CAMERA_SOURCE.getCameraIndex());
         rotationTextView = findViewById(R.id.rotation_tv);
+//        SeekBar methodSeekBar = findViewById(R.id.seekBar);
+//        methodSeekBar.setOnSeekBarChangeListener(new SeekBarChangeListener());
 
         OrientationEventListener orientationEventListener = initLocationListener();
         if (orientationEventListener.canDetectOrientation()) {
@@ -220,9 +223,41 @@ public class MainActivity extends AppCompatActivity {
                     eyeTrackingProcessor.setScreenRotation(90);
                 } else {
                     rotationTextView.setText(getString(R.string.n_0_degree));
-                    eyeTrackingProcessor.setScreenRotation(0);
+                    eyeTrackingProcessor.setScreenRotation(180);
                 }
             }
         };
+    }
+
+    private enum CameraSource {
+        FRONT(98), BACK(99);
+
+        private final int cameraIndex;
+
+        CameraSource(int cameraIndex) {
+            this.cameraIndex = cameraIndex;
+        }
+
+        private int getCameraIndex() {
+            return cameraIndex;
+        }
+    }
+
+    private class SeekBarChangeListener implements SeekBar.OnSeekBarChangeListener {
+
+        @Override
+        public void onProgressChanged(SeekBar seekBar, int progress, boolean b) {
+            eyeTrackingProcessor.setMethod(progress);
+        }
+
+        @Override
+        public void onStartTrackingTouch(SeekBar seekBar) {
+
+        }
+
+        @Override
+        public void onStopTrackingTouch(SeekBar seekBar) {
+
+        }
     }
 }
