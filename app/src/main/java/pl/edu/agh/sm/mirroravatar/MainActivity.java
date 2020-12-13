@@ -15,12 +15,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.JavaCamera2View;
 import org.opencv.android.OpenCVLoader;
-import org.opencv.core.CvType;
-import org.opencv.core.Mat;
-import org.opencv.core.Size;
 import org.opencv.objdetect.CascadeClassifier;
 
 import java.io.File;
@@ -38,10 +34,12 @@ import static android.view.WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN;
 import static android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN;
 import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
 
-public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2 {
+public class MainActivity extends AppCompatActivity {
 
     private static final String FACE_DIR = "facelib";
     private static final String FACE_MODEL = "haarcascade_frontalface_alt2.xml";
+    private static final String LEFT_EYE_DIR = "lefteyelib";
+    private static final String LEFT_EYE_MODEL = "haarcascade_lefteye_2splits.xml";
     private static final int BYTE_SIZE = 4096;
     private static final int REQUEST_CODE_PERMISSIONS = 111;
     private static final String[] REQUIRED_PERMISSIONS = {
@@ -54,10 +52,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     private JavaCamera2View javaCameraView;
     private TextView rotationTextView;
+    private OpenCvEyeTrackingProcessor eyeTrackingProcessor;
     private CascadeClassifier faceDetector = null;
+    private CascadeClassifier leftEyeDetector = null;
     private File faceDir;
-    private Mat imageMat, grayMat;
-    private int screenRotation = 0;
+    private File leftEyeDir;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -76,7 +75,6 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         javaCameraView = (JavaCamera2View) findViewById(R.id.cameraView);
         javaCameraView.setVisibility(SurfaceView.VISIBLE);
         javaCameraView.setCameraIndex(CameraCharacteristics.LENS_FACING_FRONT);
-        javaCameraView.setCvCameraViewListener(this);
         rotationTextView = findViewById(R.id.rotation_tv);
 
         OrientationEventListener orientationEventListener = initLocationListener();
@@ -114,33 +112,11 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         if (faceDir.exists()) {
             faceDir.delete();
         }
+        if (leftEyeDir.exists()) {
+            leftEyeDir.delete();
+        }
     }
 
-    @Override
-    public void onCameraViewStarted(int width, int height) {
-        imageMat = new Mat(width, height, CvType.CV_8UC4);
-        grayMat = new Mat(width, height, CvType.CV_8UC4);
-    }
-
-    @Override
-    public void onCameraViewStopped() {
-        imageMat.release();
-        grayMat.release();
-    }
-
-    @Override
-    public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        imageMat = inputFrame.rgba();
-        // downsize gray for increase efficiency
-        Mat graySrc = inputFrame.gray();
-        Size imageSize = new Size(graySrc.width(), graySrc.height());
-        Double imageRatio = OpenCvUtils.ratioTo480(imageSize);
-        grayMat = OpenCvUtils.get480Image(graySrc, imageSize, imageRatio, screenRotation);
-
-        // detect face rectangle
-        OpenCvUtils.drawFaceRectangle(faceDetector, imageMat, grayMat, imageRatio, screenRotation);
-        return imageMat;
-    }
 
     private void checkOpenCV() {
         if (OpenCVLoader.initDebug()) {
@@ -171,11 +147,9 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     private void callFaceDetector() {
         loadFaceLib();
-        if (faceDetector != null && faceDetector.empty()) {
-            faceDetector = null;
-        } else {
-            faceDir.delete();
-        }
+        loadLeftEyeDetector();
+        eyeTrackingProcessor = new OpenCvEyeTrackingProcessor(faceDetector, leftEyeDetector);
+        javaCameraView.setCvCameraViewListener(eyeTrackingProcessor);
         javaCameraView.enableView();
     }
 
@@ -195,6 +169,37 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                 modelOutputStream.close();
             }
             faceDetector = new CascadeClassifier(faceModel.getAbsolutePath());
+            if (faceDetector.empty()) {
+                faceDetector = null;
+            } else {
+                faceDir.delete();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void loadLeftEyeDetector() {
+        try {
+            InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_lefteye_2splits);
+            leftEyeDir = getDir(LEFT_EYE_DIR, Context.MODE_PRIVATE);
+            File leftEyeModel = new File(leftEyeDir, LEFT_EYE_MODEL);
+            if (!leftEyeModel.exists()) {
+                FileOutputStream modelOutputStream = new FileOutputStream(leftEyeModel);
+                byte[] buffer = new byte[BYTE_SIZE];
+                int bytesRead;
+                while ((bytesRead = modelInputStream.read(buffer)) != -1) {
+                    modelOutputStream.write(buffer, 0, bytesRead);
+                }
+                modelInputStream.close();
+                modelOutputStream.close();
+            }
+            leftEyeDetector = new CascadeClassifier(leftEyeModel.getAbsolutePath());
+            if (leftEyeDetector.empty()) {
+                leftEyeDetector = null;
+            } else {
+                leftEyeDir.delete();
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -206,16 +211,16 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             public void onOrientationChanged(int orientation) {
                 if (Range.create(45, 134).contains(orientation)) {
                     rotationTextView.setText(getString(R.string.n_270_degree));
-                    screenRotation = 270;
+                    eyeTrackingProcessor.setScreenRotation(270);
                 } else if (Range.create(135, 224).contains(orientation)) {
                     rotationTextView.setText(getString(R.string.n_180_degree));
-                    screenRotation = 180;
+                    eyeTrackingProcessor.setScreenRotation(180);
                 } else if (Range.create(225, 314).contains(orientation)) {
                     rotationTextView.setText(getString(R.string.n_90_degree));
-                    screenRotation = 90;
+                    eyeTrackingProcessor.setScreenRotation(90);
                 } else {
                     rotationTextView.setText(getString(R.string.n_0_degree));
-                    screenRotation = 0;
+                    eyeTrackingProcessor.setScreenRotation(0);
                 }
             }
         };
