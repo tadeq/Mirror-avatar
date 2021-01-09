@@ -2,11 +2,11 @@ package pl.edu.agh.sm.mirroravatar;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.hardware.Camera;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Range;
 import android.view.OrientationEventListener;
-import android.view.SurfaceView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -14,7 +14,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import org.opencv.android.JavaCamera2View;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.objdetect.CascadeClassifier;
 
@@ -24,18 +23,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 
-import static android.Manifest.permission.ACCESS_FINE_LOCATION;
+import pl.edu.agh.sm.mirroravatar.camera.HardwareCamera;
+
 import static android.Manifest.permission.CAMERA;
-import static android.Manifest.permission.READ_EXTERNAL_STORAGE;
-import static android.Manifest.permission.RECORD_AUDIO;
-import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 import static android.view.WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN;
 import static android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN;
 import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final CameraSource CAMERA_SOURCE = CameraSource.FRONT;
     private static final String FACE_DIR = "facelib";
     private static final String FACE_MODEL = "haarcascade_frontalface_alt2.xml";
     private static final String LEFT_EYE_DIR = "lefteyelib";
@@ -45,14 +41,10 @@ public class MainActivity extends AppCompatActivity {
     private static final int BYTE_SIZE = 4096;
     private static final int REQUEST_CODE_PERMISSIONS = 111;
     private static final String[] REQUIRED_PERMISSIONS = {
-            CAMERA,
-            WRITE_EXTERNAL_STORAGE,
-            READ_EXTERNAL_STORAGE,
-            RECORD_AUDIO,
-            ACCESS_FINE_LOCATION
+            CAMERA
     };
 
-    private JavaCamera2View javaCameraView;
+    private HardwareCamera hardwareCamera;
     private TextView rotationTextView;
     private OpenCvEyeTrackingProcessor eyeTrackingProcessor;
     private CascadeClassifier faceDetector = null;
@@ -76,9 +68,6 @@ public class MainActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
         }
 
-        javaCameraView = (JavaCamera2View) findViewById(R.id.cameraView);
-        javaCameraView.setVisibility(SurfaceView.VISIBLE);
-        javaCameraView.setCameraIndex(CAMERA_SOURCE.getCameraIndex());
         rotationTextView = findViewById(R.id.rotation_tv);
 
         OrientationEventListener orientationEventListener = initLocationListener();
@@ -93,8 +82,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onPause() {
         super.onPause();
-        if (javaCameraView != null) {
-            javaCameraView.disableView();
+        if (hardwareCamera != null && hardwareCamera.isConnected()) {
+            hardwareCamera.disconnectCamera();
         }
     }
 
@@ -102,16 +91,17 @@ public class MainActivity extends AppCompatActivity {
     public void onResume() {
         super.onResume();
         checkOpenCV();
-        if (javaCameraView != null) {
-            javaCameraView.enableView();
+        if (hardwareCamera != null && !hardwareCamera.isConnected()) {
+            hardwareCamera.connectCamera();
         }
     }
 
     @Override
+    @SuppressWarnings("ResultOfMethodCallIgnored")
     public void onDestroy() {
         super.onDestroy();
-        if (javaCameraView != null) {
-            javaCameraView.disableView();
+        if (hardwareCamera != null && hardwareCamera.isConnected()) {
+            hardwareCamera.disconnectCamera();
         }
         if (faceDir.exists()) {
             faceDir.delete();
@@ -152,15 +142,18 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private void callFaceDetector() {
         loadFaceLib();
         loadLeftEyeDetector();
         loadRightEyeDetector();
-        eyeTrackingProcessor = new OpenCvEyeTrackingProcessor(faceDetector, leftEyeDetector, rightEyeDetector);
-        javaCameraView.setCvCameraViewListener(eyeTrackingProcessor);
-        javaCameraView.enableView();
+        eyeTrackingProcessor = new OpenCvEyeTrackingProcessor(this, faceDetector, leftEyeDetector, rightEyeDetector);
+        hardwareCamera = new HardwareCamera(Camera.CameraInfo.CAMERA_FACING_FRONT);
+        hardwareCamera.setCameraListener(eyeTrackingProcessor);
+        hardwareCamera.connectCamera();
     }
 
+    @SuppressWarnings("ResultOfMethodCallIgnored")
     private void loadFaceLib() {
         InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_frontalface_alt2);
         faceDir = getDir(FACE_DIR, Context.MODE_PRIVATE);
@@ -174,6 +167,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @SuppressWarnings("ResultOfMethodCallIgnored")
     private void loadLeftEyeDetector() {
         InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_lefteye_2splits);
         leftEyeDir = getDir(LEFT_EYE_DIR, Context.MODE_PRIVATE);
@@ -187,6 +181,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @SuppressWarnings("ResultOfMethodCallIgnored")
     private void loadRightEyeDetector() {
         InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_righteye_2splits);
         rightEyeDir = getDir(RIGHT_EYE_DIR, Context.MODE_PRIVATE);
@@ -226,7 +221,7 @@ public class MainActivity extends AppCompatActivity {
                     eyeTrackingProcessor.setScreenRotation(270);
                 } else if (Range.create(135, 224).contains(orientation)) {
                     rotationTextView.setText(getString(R.string.n_180_degree));
-                    eyeTrackingProcessor.setScreenRotation(180);
+                    eyeTrackingProcessor.setScreenRotation(0);
                 } else if (Range.create(225, 314).contains(orientation)) {
                     rotationTextView.setText(getString(R.string.n_90_degree));
                     eyeTrackingProcessor.setScreenRotation(90);
@@ -238,17 +233,4 @@ public class MainActivity extends AppCompatActivity {
         };
     }
 
-    private enum CameraSource {
-        FRONT(98), BACK(99);
-
-        private final int cameraIndex;
-
-        CameraSource(int cameraIndex) {
-            this.cameraIndex = cameraIndex;
-        }
-
-        private int getCameraIndex() {
-            return cameraIndex;
-        }
-    }
 }
