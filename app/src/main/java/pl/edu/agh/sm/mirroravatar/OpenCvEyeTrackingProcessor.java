@@ -1,10 +1,9 @@
 package pl.edu.agh.sm.mirroravatar;
 
-import android.app.Activity;
-import android.content.Context;
+import android.os.Bundle;
+import android.os.Message;
 import android.util.Log;
 import android.util.Pair;
-import android.widget.TextView;
 
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
@@ -17,6 +16,8 @@ import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
 import org.opencv.objdetect.Objdetect;
 
+import java.util.Optional;
+
 import pl.edu.agh.sm.mirroravatar.camera.HardwareCamera;
 
 import static org.opencv.core.Core.ROTATE_90_CLOCKWISE;
@@ -24,7 +25,7 @@ import static org.opencv.core.Core.ROTATE_90_COUNTERCLOCKWISE;
 
 public class OpenCvEyeTrackingProcessor implements HardwareCamera.CameraListener {
 
-    private final Context context;
+    private final MainActivity.EyeDetectionHandler eyeDetectionHandler;
     private final CascadeClassifier faceDetector;
     private final CascadeClassifier leftEyeDetector;
     private final CascadeClassifier rightEyeDetector;
@@ -33,8 +34,8 @@ public class OpenCvEyeTrackingProcessor implements HardwareCamera.CameraListener
     private Double imageRatio;
     private int screenRotation = 0;
 
-    public OpenCvEyeTrackingProcessor(Context context, CascadeClassifier faceDetector, CascadeClassifier leftEyeDetector, CascadeClassifier rightEyeDetector) {
-        this.context = context;
+    public OpenCvEyeTrackingProcessor(MainActivity.EyeDetectionHandler eyeDetectionHandler, CascadeClassifier faceDetector, CascadeClassifier leftEyeDetector, CascadeClassifier rightEyeDetector) {
+        this.eyeDetectionHandler = eyeDetectionHandler;
         this.faceDetector = faceDetector;
         this.leftEyeDetector = leftEyeDetector;
         this.rightEyeDetector = rightEyeDetector;
@@ -89,30 +90,29 @@ public class OpenCvEyeTrackingProcessor implements HardwareCamera.CameraListener
                 (int) (rect.y + (rect.height / 4.0)),
                 (rect.width - 2 * rect.width / 7) / 2, (int) (rect.height / 4.0));
 
-        Pair<Point, Point> rightEye = detectIris(eyearea_right, rightEyeDetector);
-        Pair<Point, Point> leftEye = detectIris(eyearea_left, leftEyeDetector);
-        setCenterPointAndIrisTextViews(rightEye, R.id.rightEyeCenterPoint, R.id.rightIrisPoint);
-        setCenterPointAndIrisTextViews(leftEye, R.id.leftEyeCenterPoint, R.id.leftIrisPoint);
+        detectIris(eyearea_left, leftEyeDetector).ifPresent(pointPointPair ->
+                setCenterPointAndIrisTextViews(pointPointPair, MainActivity.LEFT_EYE_MESSAGE_ID));
+        detectIris(eyearea_right, rightEyeDetector).ifPresent(pointPointPair ->
+                setCenterPointAndIrisTextViews(pointPointPair, MainActivity.RIGHT_EYE_MESSAGE_ID));
     }
 
-    private void setCenterPointAndIrisTextViews(Pair<Point, Point> eye, int eyeCenterPoint, int irisPointRId) {
+    private void setCenterPointAndIrisTextViews(Pair<Point, Point> eye, int eyeMessageId) {
+        Message msg = eyeDetectionHandler.obtainMessage();
+        msg.what = eyeMessageId;
+        Bundle b = new Bundle();
         Point pseudoEyeCenter = eye.first;
-        if (pseudoEyeCenter != null) {
-            TextView eyeCenterPointTextView = ((Activity) context).findViewById(eyeCenterPoint);
-            ((Activity) context).runOnUiThread(() -> eyeCenterPointTextView.setText(pseudoEyeCenter.toString()));
-        }
         Point iris = eye.second;
-        if (iris != null) {
-            TextView irisPointTextView = ((Activity) context).findViewById(irisPointRId);
-            ((Activity) context).runOnUiThread(() -> irisPointTextView.setText(iris.toString()));
-        }
+        b.putString(MainActivity.EYE_CENTER_POINT_X_ID, String.valueOf(pseudoEyeCenter.x));
+        b.putString(MainActivity.EYE_CENTER_POINT_Y_ID, String.valueOf(pseudoEyeCenter.y));
+        b.putString(MainActivity.IRIS_POINT_X_ID, String.valueOf(iris.x));
+        b.putString(MainActivity.IRIS_POINT_Y_ID, String.valueOf(iris.y));
+        msg.setData(b);
+        eyeDetectionHandler.sendMessage(msg);
     }
 
-    private Pair<Point, Point> detectIris(Rect area, CascadeClassifier classifier) {
+    private Optional<Pair<Point, Point>> detectIris(Rect area, CascadeClassifier classifier) {
         Mat mROI = grayMat.submat(area);
         MatOfRect eyes = new MatOfRect();
-        Point iris = null;
-        Point pseudoEyeCenter = null;
         classifier.detectMultiScale(mROI, eyes, 1.15, 2,
                 Objdetect.CASCADE_FIND_BIGGEST_OBJECT
                         | Objdetect.CASCADE_SCALE_IMAGE, new Size(30, 30),
@@ -122,17 +122,17 @@ public class OpenCvEyeTrackingProcessor implements HardwareCamera.CameraListener
             Rect eye = eyesArray[0];
             eye.x = area.x + eye.x;
             eye.y = area.y + eye.y;
-            Rect eye_only_rectangle = new Rect((int) eye.tl().x,
-                    (int) (eye.tl().y + eye.height * 0.4), (int) eye.width,
-                    (int) (eye.height * 0.6));
-            pseudoEyeCenter = new Point(eye_only_rectangle.x + eye_only_rectangle.width / 2.0,
+            Rect eye_only_rectangle = new Rect((int) eye.tl().x, (int) (eye.tl().y + eye.height * 0.4),
+                    eye.width, (int) (eye.height * 0.6));
+            Point pseudoEyeCenter = new Point(eye_only_rectangle.x + eye_only_rectangle.width / 2.0,
                     eye_only_rectangle.y + eye_only_rectangle.height / 2.0);
             mROI = grayMat.submat(eye_only_rectangle);
             Core.MinMaxLocResult mmG = Core.minMaxLoc(mROI);
-            iris = new Point(mmG.minLoc.x + eye_only_rectangle.x, mmG.minLoc.y + eye_only_rectangle.y);
+            Point iris = new Point(mmG.minLoc.x + eye_only_rectangle.x, mmG.minLoc.y + eye_only_rectangle.y);
             Log.d("EyesDetector", iris.toString());
+            return Optional.of(new Pair<>(pseudoEyeCenter, iris));
         }
-        return new Pair<>(pseudoEyeCenter, iris);
+        return Optional.empty();
     }
 
     public Mat getScaledImage(Mat src, Size imageSize) {

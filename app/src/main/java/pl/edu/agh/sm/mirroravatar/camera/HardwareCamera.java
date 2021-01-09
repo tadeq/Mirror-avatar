@@ -55,7 +55,7 @@ public class HardwareCamera implements Camera.PreviewCallback {
                     break;
                 } catch (RuntimeException e) {
                     Log.e(TAG, String.format("Camera is not available (in use or does not exist). " +
-                                    "Facing: %s Index: %s Error: %s", facing, camIdx, e.getMessage()));
+                            "Facing: %s Index: %s Error: %s", facing, camIdx, e.getMessage()));
                 }
             }
         }
@@ -97,7 +97,7 @@ public class HardwareCamera implements Camera.PreviewCallback {
         mFrameHeight = params.getPreviewSize().height;
 
         int size = mFrameWidth * mFrameHeight;
-        size = size* ImageFormat.getBitsPerPixel(params.getPreviewFormat()) / 8;
+        size = size * ImageFormat.getBitsPerPixel(params.getPreviewFormat()) / 8;
 
         this.mBuffer = new byte[size];
         Log.d(TAG, "Created callback buffer of size (bytes): " + size);
@@ -116,7 +116,7 @@ public class HardwareCamera implements Camera.PreviewCallback {
             mCamera.startPreview();
 
             Log.d(TAG, String.format("Camera preview started with %sx%s. " +
-                    "Rendering to SurfaceTexture dummy while receiving preview frames.",
+                            "Rendering to SurfaceTexture dummy while receiving preview frames.",
                     mFrameWidth, mFrameHeight));
         } catch (Exception e) {
             Log.d(TAG, "Error starting camera preview: " + e.getMessage());

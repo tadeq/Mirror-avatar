@@ -1,9 +1,12 @@
 package pl.edu.agh.sm.mirroravatar;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.hardware.Camera;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 import android.util.Range;
 import android.view.OrientationEventListener;
@@ -21,6 +24,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.ref.WeakReference;
 import java.util.Arrays;
 
 import pl.edu.agh.sm.mirroravatar.camera.HardwareCamera;
@@ -32,6 +36,12 @@ import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
 
 public class MainActivity extends AppCompatActivity {
 
+    public static final int LEFT_EYE_MESSAGE_ID = 0;
+    public static final int RIGHT_EYE_MESSAGE_ID = 1;
+    public static final String EYE_CENTER_POINT_X_ID = "eyeCenterPointX";
+    public static final String EYE_CENTER_POINT_Y_ID = "eyeCenterPointY";
+    public static final String IRIS_POINT_X_ID = "irisPointX";
+    public static final String IRIS_POINT_Y_ID = "irisPointY";
     private static final String FACE_DIR = "facelib";
     private static final String FACE_MODEL = "haarcascade_frontalface_alt2.xml";
     private static final String LEFT_EYE_DIR = "lefteyelib";
@@ -43,9 +53,14 @@ public class MainActivity extends AppCompatActivity {
     private static final String[] REQUIRED_PERMISSIONS = {
             CAMERA
     };
+    private final EyeDetectionHandler eyeDetectionHandler = new EyeDetectionHandler(this);
 
     private HardwareCamera hardwareCamera;
     private TextView rotationTextView;
+    private TextView leftEyeCenterPointTextView;
+    private TextView leftIrisPointTextView;
+    private TextView rightEyeCenterPointTextView;
+    private TextView rightIrisPointTextView;
     private OpenCvEyeTrackingProcessor eyeTrackingProcessor;
     private CascadeClassifier faceDetector = null;
     private CascadeClassifier leftEyeDetector = null;
@@ -69,7 +84,10 @@ public class MainActivity extends AppCompatActivity {
         }
 
         rotationTextView = findViewById(R.id.rotation_tv);
-
+        leftEyeCenterPointTextView = findViewById(R.id.leftEyeCenterPoint);
+        leftIrisPointTextView = findViewById(R.id.leftIrisPoint);
+        rightEyeCenterPointTextView = findViewById(R.id.rightEyeCenterPoint);
+        rightIrisPointTextView = findViewById(R.id.rightIrisPoint);
         OrientationEventListener orientationEventListener = initLocationListener();
         if (orientationEventListener.canDetectOrientation()) {
             orientationEventListener.enable();
@@ -147,7 +165,7 @@ public class MainActivity extends AppCompatActivity {
         loadFaceLib();
         loadLeftEyeDetector();
         loadRightEyeDetector();
-        eyeTrackingProcessor = new OpenCvEyeTrackingProcessor(this, faceDetector, leftEyeDetector, rightEyeDetector);
+        eyeTrackingProcessor = new OpenCvEyeTrackingProcessor(eyeDetectionHandler, faceDetector, leftEyeDetector, rightEyeDetector);
         hardwareCamera = new HardwareCamera(Camera.CameraInfo.CAMERA_FACING_FRONT);
         hardwareCamera.setCameraListener(eyeTrackingProcessor);
         hardwareCamera.connectCamera();
@@ -231,6 +249,35 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         };
+    }
+
+    public static class EyeDetectionHandler extends Handler {
+
+        private final WeakReference<MainActivity> sActivity;
+
+        EyeDetectionHandler(MainActivity activity) {
+            sActivity = new WeakReference<>(activity);
+        }
+
+        @SuppressLint("SetTextI18n")
+        public void handleMessage(Message msg) {
+            MainActivity activity = sActivity.get();
+            TextView eyeCenterPointTextView;
+            TextView irisPointTextView;
+            if (msg.what == LEFT_EYE_MESSAGE_ID) {
+                eyeCenterPointTextView = activity.leftEyeCenterPointTextView;
+                irisPointTextView = activity.leftIrisPointTextView;
+            } else {
+                eyeCenterPointTextView = activity.rightEyeCenterPointTextView;
+                irisPointTextView = activity.rightIrisPointTextView;
+            }
+            Double eyeCenterPointX = Double.valueOf(msg.getData().getString(EYE_CENTER_POINT_X_ID));
+            Double eyeCenterPointY = Double.valueOf(msg.getData().getString(EYE_CENTER_POINT_Y_ID));
+            Double irisPointX = Double.valueOf(msg.getData().getString(IRIS_POINT_X_ID));
+            Double irisPointY = Double.valueOf(msg.getData().getString(IRIS_POINT_Y_ID));
+            eyeCenterPointTextView.setText(eyeCenterPointX + ", " + eyeCenterPointY);
+            irisPointTextView.setText(irisPointX + ", " + irisPointY);
+        }
     }
 
 }
