@@ -9,13 +9,16 @@ import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
 import android.util.Range;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.OrientationEventListener;
 import android.view.View;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -32,6 +35,10 @@ import java.lang.ref.WeakReference;
 import java.util.Arrays;
 
 import pl.edu.agh.sm.mirroravatar.camera.HardwareCamera;
+
+import androidx.appcompat.app.ActionBar;
+import android.view.ViewGroup;
+
 
 import static android.Manifest.permission.CAMERA;
 import static android.view.WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN;
@@ -61,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
     private final EyeDetectionHandler eyeDetectionHandler = new EyeDetectionHandler(this);
 
     private HardwareCamera hardwareCamera;
+    private LinearLayout layout;
     private TextView rotationTextView;
     private TextView leftEyeCenterPointTextView;
     private TextView leftIrisPointTextView;
@@ -88,27 +96,6 @@ public class MainActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
         }
 
-//rajawali
-        final RajawaliSurfaceView surface = new RajawaliSurfaceView(this);
-        surface.setFrameRate(60.0);
-        surface.setRenderMode(IRajawaliSurface.RENDERMODE_WHEN_DIRTY);
-
-        modelRenderer = new ObjRenderer(this);
-        surface.setSurfaceRenderer(modelRenderer);
-        surface.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View view, MotionEvent motionEvent) {
-                modelRenderer.onTouchEvent(motionEvent);
-                return true;
-            }
-        });
-
-// rajawali end
-
-
-
-
-
         rotationTextView = findViewById(R.id.rotation_tv);
         leftEyeCenterPointTextView = findViewById(R.id.leftEyeCenterPoint);
         leftIrisPointTextView = findViewById(R.id.leftIrisPoint);
@@ -121,6 +108,28 @@ public class MainActivity extends AppCompatActivity {
             orientationEventListener.disable();
         }
         callFaceDetector();
+
+        final RajawaliSurfaceView surface = new RajawaliSurfaceView(this);
+        surface.setFrameRate(60.0);
+        surface.setRenderMode(IRajawaliSurface.RENDERMODE_WHEN_DIRTY);
+
+        layout = findViewById(R.id.layout);
+//        ViewGroup.LayoutParams lp = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+//        lp.gravity = Gravity.BOTTOM;
+//        addContentView(surface, lp);
+//        addContentView(surface, new ActionBar.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT));
+        layout.addView(surface);
+
+        modelRenderer = new ObjRenderer(this);
+        surface.setSurfaceRenderer(modelRenderer);
+
+//        surface.setOnTouchListener(new View.OnTouchListener() {
+//            @Override
+//            public boolean onTouch(View view, MotionEvent motionEvent) {
+//                modelRenderer.onTouchEvent(motionEvent);
+//                return true;
+//            }
+//        });
     }
 
     @Override
@@ -290,19 +299,27 @@ public class MainActivity extends AppCompatActivity {
             MainActivity activity = sActivity.get();
             TextView eyeCenterPointTextView;
             TextView irisPointTextView;
-            if (msg.what == LEFT_EYE_MESSAGE_ID) {
-                eyeCenterPointTextView = activity.leftEyeCenterPointTextView;
-                irisPointTextView = activity.leftIrisPointTextView;
-            } else {
-                eyeCenterPointTextView = activity.rightEyeCenterPointTextView;
-                irisPointTextView = activity.rightIrisPointTextView;
-            }
+
             Double eyeCenterPointX = Double.valueOf(msg.getData().getString(EYE_CENTER_POINT_X_ID));
             Double eyeCenterPointY = Double.valueOf(msg.getData().getString(EYE_CENTER_POINT_Y_ID));
             Double irisPointX = Double.valueOf(msg.getData().getString(IRIS_POINT_X_ID));
             Double irisPointY = Double.valueOf(msg.getData().getString(IRIS_POINT_Y_ID));
+
+            if (msg.what == LEFT_EYE_MESSAGE_ID) {
+                eyeCenterPointTextView = activity.leftEyeCenterPointTextView;
+                irisPointTextView = activity.leftIrisPointTextView;
+                activity.modelRenderer.setEyesPosition(eyeCenterPointX, eyeCenterPointY, irisPointX, irisPointY);
+            } else {
+                eyeCenterPointTextView = activity.rightEyeCenterPointTextView;
+                irisPointTextView = activity.rightIrisPointTextView;
+            }
+
+
             eyeCenterPointTextView.setText(eyeCenterPointX + ", " + eyeCenterPointY);
             irisPointTextView.setText(irisPointX + ", " + irisPointY);
+
+//          to move eyes separately
+//            activity.modelRenderer.setEyePosition(eyeCenterPointX, eyeCenterPointY, irisPointX, irisPointY, msg.what);
         }
     }
 

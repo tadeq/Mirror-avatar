@@ -129,7 +129,7 @@ public class OpenCvEyeTrackingProcessor implements HardwareCamera.CameraListener
             mROI = grayMat.submat(eye_only_rectangle);
             Core.MinMaxLocResult mmG = Core.minMaxLoc(mROI);
             Point iris = new Point(mmG.minLoc.x + eye_only_rectangle.x, mmG.minLoc.y + eye_only_rectangle.y);
-            Log.d("EyesDetector", iris.toString());
+//            Log.d("EyesDetector", iris.toString());
             return Optional.of(new Pair<>(pseudoEyeCenter, iris));
         }
         return Optional.empty();
