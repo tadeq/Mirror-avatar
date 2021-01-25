@@ -1,292 +1,326 @@
 package pl.edu.agh.sm.mirroravatar;
 
-import android.Manifest;
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.Dialog;
+import android.annotation.SuppressLint;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.pm.PackageManager;
+import android.hardware.Camera;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
+import android.util.Range;
+import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.OrientationEventListener;
 import android.view.View;
-import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
-import androidx.appcompat.app.ActionBar;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.GoogleApiAvailability;
-import com.google.android.gms.vision.CameraSource;
-import com.google.android.gms.vision.Detector;
-import com.google.android.gms.vision.MultiProcessor;
-import com.google.android.gms.vision.Tracker;
-import com.google.android.gms.vision.face.Face;
-import com.google.android.gms.vision.face.FaceDetector;
-import com.google.android.gms.vision.face.Landmark;
-import com.google.android.material.snackbar.Snackbar;
-import com.google.common.collect.ImmutableMap;
-
+import org.opencv.android.OpenCVLoader;
+import org.opencv.objdetect.CascadeClassifier;
 import org.rajawali3d.surface.IRajawaliSurface;
 import org.rajawali3d.surface.RajawaliSurfaceView;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Map;
+import java.io.InputStream;
+import java.lang.ref.WeakReference;
+import java.util.Arrays;
 
-import pl.edu.agh.sm.mirroravatar.camera.CameraSourcePreview;
+import pl.edu.agh.sm.mirroravatar.camera.HardwareCamera;
 
+import androidx.appcompat.app.ActionBar;
+import android.view.ViewGroup;
+
+
+import static android.Manifest.permission.CAMERA;
+import static android.view.WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN;
+import static android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN;
+import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
 
 public class MainActivity extends AppCompatActivity {
     private ObjRenderer modelRenderer;
 
-    private static final String TAG = "MirrorAvatar";
+    public static final int LEFT_EYE_MESSAGE_ID = 0;
+    public static final int RIGHT_EYE_MESSAGE_ID = 1;
+    public static final String EYE_CENTER_POINT_X_ID = "eyeCenterPointX";
+    public static final String EYE_CENTER_POINT_Y_ID = "eyeCenterPointY";
+    public static final String IRIS_POINT_X_ID = "irisPointX";
+    public static final String IRIS_POINT_Y_ID = "irisPointY";
+    private static final String FACE_DIR = "facelib";
+    private static final String FACE_MODEL = "haarcascade_frontalface_alt2.xml";
+    private static final String LEFT_EYE_DIR = "lefteyelib";
+    private static final String LEFT_EYE_MODEL = "haarcascade_lefteye_2splits.xml";
+    private static final String RIGHT_EYE_DIR = "righteyelib";
+    private static final String RIGHT_EYE_MODEL = "haarcascade_righteye_2splits.xml";
+    private static final int BYTE_SIZE = 4096;
+    private static final int REQUEST_CODE_PERMISSIONS = 111;
+    private static final String[] REQUIRED_PERMISSIONS = {
+            CAMERA
+    };
+    private final EyeDetectionHandler eyeDetectionHandler = new EyeDetectionHandler(this);
 
-    private CameraSource mCameraSource = null;
-
-    private CameraSourcePreview mPreview;
-
-    private static final int RC_HANDLE_GMS = 9001;
-    // permission request codes need to be < 256
-    private static final int RC_HANDLE_CAMERA_PERM = 2;
+    private HardwareCamera hardwareCamera;
+    private LinearLayout layout;
+    private TextView rotationTextView;
+    private TextView leftEyeCenterPointTextView;
+    private TextView leftIrisPointTextView;
+    private TextView rightEyeCenterPointTextView;
+    private TextView rightIrisPointTextView;
+    private OpenCvEyeTrackingProcessor eyeTrackingProcessor;
+    private CascadeClassifier faceDetector = null;
+    private CascadeClassifier leftEyeDetector = null;
+    private CascadeClassifier rightEyeDetector = null;
+    private File faceDir;
+    private File leftEyeDir;
+    private File rightEyeDir;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().clearFlags(FLAG_FORCE_NOT_FULLSCREEN);
+        getWindow().setFlags(FLAG_FULLSCREEN, FLAG_FULLSCREEN);
+        getWindow().addFlags(FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
 
-        mPreview = (CameraSourcePreview) findViewById(R.id.preview);
-
-        // Check for the camera permission before accessing the camera.  If the
-        // permission is not granted yet, request permission.
-        int rc = ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA);
-        if (rc == PackageManager.PERMISSION_GRANTED) {
-            createCameraSource();
+        if (allPermissionsGranted()) {
+            checkOpenCV();
         } else {
-            requestCameraPermission();
+            ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
         }
 
+        rotationTextView = findViewById(R.id.rotation_tv);
+        leftEyeCenterPointTextView = findViewById(R.id.leftEyeCenterPoint);
+        leftIrisPointTextView = findViewById(R.id.leftIrisPoint);
+        rightEyeCenterPointTextView = findViewById(R.id.rightEyeCenterPoint);
+        rightIrisPointTextView = findViewById(R.id.rightIrisPoint);
+        OrientationEventListener orientationEventListener = initLocationListener();
+        if (orientationEventListener.canDetectOrientation()) {
+            orientationEventListener.enable();
+        } else {
+            orientationEventListener.disable();
+        }
+        callFaceDetector();
 
         final RajawaliSurfaceView surface = new RajawaliSurfaceView(this);
         surface.setFrameRate(60.0);
         surface.setRenderMode(IRajawaliSurface.RENDERMODE_WHEN_DIRTY);
 
-        // Add mSurface to your root view
-        addContentView(surface, new ActionBar.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT));
+        layout = findViewById(R.id.layout);
+//        ViewGroup.LayoutParams lp = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+//        lp.gravity = Gravity.BOTTOM;
+//        addContentView(surface, lp);
+//        addContentView(surface, new ActionBar.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT));
+        layout.addView(surface);
 
         modelRenderer = new ObjRenderer(this);
         surface.setSurfaceRenderer(modelRenderer);
-        surface.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View view, MotionEvent motionEvent) {
-                modelRenderer.onTouchEvent(motionEvent);
-                return true;
-            }
-        });
+
+//        surface.setOnTouchListener(new View.OnTouchListener() {
+//            @Override
+//            public boolean onTouch(View view, MotionEvent motionEvent) {
+//                modelRenderer.onTouchEvent(motionEvent);
+//                return true;
+//            }
+//        });
     }
 
-    /**
-     * Handles the requesting of the camera permission.  This includes
-     * showing a "Snackbar" message of why the permission is needed then
-     * sending the request.
-     */
-    private void requestCameraPermission() {
-        Log.w(TAG, "Camera permission is not granted. Requesting permission");
-
-        final String[] permissions = new String[]{Manifest.permission.CAMERA};
-
-        if (!ActivityCompat.shouldShowRequestPermissionRationale(this,
-                Manifest.permission.CAMERA)) {
-            ActivityCompat.requestPermissions(this, permissions, RC_HANDLE_CAMERA_PERM);
-            return;
-        }
-
-        final Activity thisActivity = this;
-
-        View.OnClickListener listener = new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                ActivityCompat.requestPermissions(thisActivity, permissions,
-                        RC_HANDLE_CAMERA_PERM);
-            }
-        };
-
-        Snackbar.make(mPreview, R.string.permission_camera_rationale,
-                Snackbar.LENGTH_INDEFINITE)
-                .setAction(R.string.ok, listener)
-                .show();
-    }
-
-    /**
-     * Creates and starts the camera.  Note that this uses a higher resolution in comparison
-     * to other detection examples to enable the barcode detector to detect small barcodes
-     * at long distances.
-     */
-    private void createCameraSource() {
-        Context context = getApplicationContext();
-        FaceDetector detector = new FaceDetector.Builder(context)
-                .setClassificationType(FaceDetector.ALL_CLASSIFICATIONS)
-                .setLandmarkType(FaceDetector.ALL_LANDMARKS)
-                .build();
-        detector.setProcessor(
-                new MultiProcessor.Builder<>(new FaceTrackerFactory())
-                        .build());
-
-        if (!detector.isOperational()) {
-            // Note: The first time that an app using face API is installed on a device, GMS will
-            // download a native library to the device in order to do detection.  Usually this
-            // completes before the app is run for the first time.  But if that download has not yet
-            // completed, then the above call will not detect any faces.
-            //
-            // isOperational() can be used to check if the required native library is currently
-            // available.  The detector will automatically become operational once the library
-            // download completes on device.
-            Log.w(TAG, "Face detector dependencies are not yet available.");
-        }
-
-        mCameraSource = new CameraSource.Builder(context, detector)
-                .setRequestedPreviewSize(640, 480)
-                .setFacing(CameraSource.CAMERA_FACING_BACK)
-                .setRequestedFps(30.0f)
-                .build();
-    }
-
-    /**
-     * Restarts the camera.
-     */
     @Override
-    protected void onResume() {
-        super.onResume();
-        startCameraSource();
-    }
-
-    /**
-     * Stops the camera.
-     */
-    @Override
-    protected void onPause() {
+    public void onPause() {
         super.onPause();
-        mPreview.stop();
+        if (hardwareCamera != null && hardwareCamera.isConnected()) {
+            hardwareCamera.disconnectCamera();
+        }
     }
 
-    /**
-     * Releases the resources associated with the camera source, the associated detector, and the
-     * rest of the processing pipeline.
-     */
     @Override
-    protected void onDestroy() {
+    public void onResume() {
+        super.onResume();
+        checkOpenCV();
+        if (hardwareCamera != null && !hardwareCamera.isConnected()) {
+            hardwareCamera.connectCamera();
+        }
+    }
+
+    @Override
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    public void onDestroy() {
         super.onDestroy();
-        if (mCameraSource != null) {
-            mCameraSource.release();
+        if (hardwareCamera != null && hardwareCamera.isConnected()) {
+            hardwareCamera.disconnectCamera();
+        }
+        if (faceDir.exists()) {
+            faceDir.delete();
+        }
+        if (leftEyeDir.exists()) {
+            leftEyeDir.delete();
+        }
+        if (rightEyeDir.exists()) {
+            rightEyeDir.delete();
         }
     }
 
-    /**
-     * Callback for the result from requesting permissions. This method
-     * is invoked for every call on {@link #requestPermissions(String[], int)}.
-     * <p>
-     * <strong>Note:</strong> It is possible that the permissions request interaction
-     * with the user is interrupted. In this case you will receive empty permissions
-     * and results arrays which should be treated as a cancellation.
-     * </p>
-     *
-     * @param requestCode  The request code passed in {@link #requestPermissions(String[], int)}.
-     * @param permissions  The requested permissions. Never null.
-     * @param grantResults The grant results for the corresponding permissions
-     *                     which is either {@link PackageManager#PERMISSION_GRANTED}
-     *                     or {@link PackageManager#PERMISSION_DENIED}. Never null.
-     * @see #requestPermissions(String[], int)
-     */
+
+    private void checkOpenCV() {
+        if (OpenCVLoader.initDebug()) {
+            Log.d("OpenCV", "OpenCV loaded successfully!");
+        } else {
+            Log.d("OpenCV", "Cannot load OpenCV!");
+        }
+    }
+
+    private boolean allPermissionsGranted() {
+        return Arrays.stream(REQUIRED_PERMISSIONS).allMatch(e ->
+                ContextCompat.checkSelfPermission(getBaseContext(), e) == PackageManager.PERMISSION_GRANTED
+        );
+    }
+
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode != RC_HANDLE_CAMERA_PERM) {
-            Log.d(TAG, "Got unexpected permission result: " + requestCode);
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-            return;
-        }
-
-        if (grantResults.length != 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            Log.d(TAG, "Camera permission granted - initialize the camera source");
-            // we have permission, so create the camerasource
-            createCameraSource();
-            return;
-        }
-
-        Log.e(TAG, "Permission not granted: results len = " + grantResults.length +
-                " Result code = " + (grantResults.length > 0 ? grantResults[0] : "(empty)"));
-
-        DialogInterface.OnClickListener listener = new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface dialog, int id) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        //Checking the request code of our request
+        if (requestCode == REQUEST_CODE_PERMISSIONS) {
+            if (allPermissionsGranted()) {
+                checkOpenCV();
+            } else {
+                Log.d("Permissions", "Permissions not granted by the user.");
                 finish();
             }
-        };
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Face Tracker sample")
-                .setMessage(R.string.no_camera_permission)
-                .setPositiveButton(R.string.ok, listener)
-                .show();
+        }
     }
 
-    /**
-     * Starts or restarts the camera source, if it exists.  If the camera source doesn't exist yet
-     * (e.g., because onResume was called before the camera source was created), this will be called
-     * again when the camera source is created.
-     */
-    private void startCameraSource() {
+    @SuppressWarnings("deprecation")
+    private void callFaceDetector() {
+        loadFaceLib();
+        loadLeftEyeDetector();
+        loadRightEyeDetector();
+        eyeTrackingProcessor = new OpenCvEyeTrackingProcessor(eyeDetectionHandler, faceDetector, leftEyeDetector, rightEyeDetector);
+        hardwareCamera = new HardwareCamera(Camera.CameraInfo.CAMERA_FACING_FRONT);
+        hardwareCamera.setCameraListener(eyeTrackingProcessor);
+        hardwareCamera.connectCamera();
+    }
 
-        // check that the device has play services available.
-        int code = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(
-                getApplicationContext());
-        if (code != ConnectionResult.SUCCESS) {
-            Dialog dlg =
-                    GoogleApiAvailability.getInstance().getErrorDialog(this, code, RC_HANDLE_GMS);
-            dlg.show();
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    private void loadFaceLib() {
+        InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_frontalface_alt2);
+        faceDir = getDir(FACE_DIR, Context.MODE_PRIVATE);
+        File faceModel = new File(faceDir, FACE_MODEL);
+        loadModel(modelInputStream, faceModel);
+        faceDetector = new CascadeClassifier(faceModel.getAbsolutePath());
+        if (faceDetector.empty()) {
+            faceDetector = null;
+        } else {
+            faceDir.delete();
         }
+    }
 
-        if (mCameraSource != null) {
-            try {
-                mPreview.start(mCameraSource);
-            } catch (IOException e) {
-                Log.e(TAG, "Unable to start camera source.", e);
-                mCameraSource.release();
-                mCameraSource = null;
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    private void loadLeftEyeDetector() {
+        InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_lefteye_2splits);
+        leftEyeDir = getDir(LEFT_EYE_DIR, Context.MODE_PRIVATE);
+        File leftEyeModel = new File(leftEyeDir, LEFT_EYE_MODEL);
+        loadModel(modelInputStream, leftEyeModel);
+        leftEyeDetector = new CascadeClassifier(leftEyeModel.getAbsolutePath());
+        if (leftEyeDetector.empty()) {
+            leftEyeDetector = null;
+        } else {
+            leftEyeDir.delete();
+        }
+    }
+
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    private void loadRightEyeDetector() {
+        InputStream modelInputStream = getResources().openRawResource(R.raw.haarcascade_righteye_2splits);
+        rightEyeDir = getDir(RIGHT_EYE_DIR, Context.MODE_PRIVATE);
+        File rightEyeModel = new File(rightEyeDir, RIGHT_EYE_MODEL);
+        loadModel(modelInputStream, rightEyeModel);
+        rightEyeDetector = new CascadeClassifier(rightEyeModel.getAbsolutePath());
+        if (rightEyeDetector.empty()) {
+            rightEyeDetector = null;
+        } else {
+            rightEyeDir.delete();
+        }
+    }
+
+    private void loadModel(InputStream modelInputStream, File model) {
+        try {
+            if (!model.exists()) {
+                FileOutputStream modelOutputStream = new FileOutputStream(model);
+                byte[] buffer = new byte[BYTE_SIZE];
+                int bytesRead;
+                while ((bytesRead = modelInputStream.read(buffer)) != -1) {
+                    modelOutputStream.write(buffer, 0, bytesRead);
+                }
+                modelInputStream.close();
+                modelOutputStream.close();
             }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
-    private class FaceTrackerFactory implements MultiProcessor.Factory<Face> {
-
-        Map<Integer, String> LANDMARK_LABELS = ImmutableMap.<Integer, String>builder()
-                .put(Landmark.LEFT_EYE, "Left eye")
-                .put(Landmark.RIGHT_EYE, "Right eye")
-                .put(Landmark.BOTTOM_MOUTH, "Bottom mouth")
-                .put(Landmark.LEFT_MOUTH, "Left mouth")
-                .put(Landmark.RIGHT_MOUTH, "Right mouth")
-                .build();
-
-        @Override
-        public Tracker<Face> create(Face face) {
-            return new Tracker<Face>() {
-                @Override
-                public void onUpdate(Detector.Detections<Face> detections, Face face) {
-                    System.out.println(mapToString(face));
-                    face.getLandmarks().stream()
-                            .filter(landmark -> LANDMARK_LABELS.containsKey(landmark.getType()))
-                            .map(this::mapToString)
-                            .forEach(System.out::println);
+    private OrientationEventListener initLocationListener() {
+        return new OrientationEventListener(this) {
+            @Override
+            public void onOrientationChanged(int orientation) {
+                if (Range.create(45, 134).contains(orientation)) {
+                    rotationTextView.setText(getString(R.string.n_270_degree));
+                    eyeTrackingProcessor.setScreenRotation(270);
+                } else if (Range.create(135, 224).contains(orientation)) {
+                    rotationTextView.setText(getString(R.string.n_180_degree));
+                    eyeTrackingProcessor.setScreenRotation(0);
+                } else if (Range.create(225, 314).contains(orientation)) {
+                    rotationTextView.setText(getString(R.string.n_90_degree));
+                    eyeTrackingProcessor.setScreenRotation(90);
+                } else {
+                    rotationTextView.setText(getString(R.string.n_0_degree));
+                    eyeTrackingProcessor.setScreenRotation(180);
                 }
+            }
+        };
+    }
 
-                private String mapToString(Face face) {
-                    return "FACE position: (" + face.getPosition().x + "," + face.getPosition().y
-                            + "), width: " + face.getWidth() + ", height: " + face.getHeight() + "]";
-                }
+    public static class EyeDetectionHandler extends Handler {
 
-                private String mapToString(Landmark landmark) {
-                    return LANDMARK_LABELS.get(landmark.getType()) + ": [" + landmark.getPosition().x + ", " + landmark.getPosition().y + "]";
-                }
-            };
+        private final WeakReference<MainActivity> sActivity;
+
+        EyeDetectionHandler(MainActivity activity) {
+            sActivity = new WeakReference<>(activity);
+        }
+
+        @SuppressLint("SetTextI18n")
+        public void handleMessage(Message msg) {
+            MainActivity activity = sActivity.get();
+            TextView eyeCenterPointTextView;
+            TextView irisPointTextView;
+
+            Double eyeCenterPointX = Double.valueOf(msg.getData().getString(EYE_CENTER_POINT_X_ID));
+            Double eyeCenterPointY = Double.valueOf(msg.getData().getString(EYE_CENTER_POINT_Y_ID));
+            Double irisPointX = Double.valueOf(msg.getData().getString(IRIS_POINT_X_ID));
+            Double irisPointY = Double.valueOf(msg.getData().getString(IRIS_POINT_Y_ID));
+
+            if (msg.what == LEFT_EYE_MESSAGE_ID) {
+                eyeCenterPointTextView = activity.leftEyeCenterPointTextView;
+                irisPointTextView = activity.leftIrisPointTextView;
+                activity.modelRenderer.setEyesPosition(eyeCenterPointX, eyeCenterPointY, irisPointX, irisPointY);
+            } else {
+                eyeCenterPointTextView = activity.rightEyeCenterPointTextView;
+                irisPointTextView = activity.rightIrisPointTextView;
+            }
+
+
+            eyeCenterPointTextView.setText(eyeCenterPointX + ", " + eyeCenterPointY);
+            irisPointTextView.setText(irisPointX + ", " + irisPointY);
+
+//          to move eyes separately
+//            activity.modelRenderer.setEyePosition(eyeCenterPointX, eyeCenterPointY, irisPointX, irisPointY, msg.what);
         }
     }
+
 }
